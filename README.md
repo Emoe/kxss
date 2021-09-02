@@ -14,7 +14,7 @@ URL: https://www.**********.***/event_register.php?event=177 Param: event Unfilt
 ## Installation
 To install this Tool please use the following Command:
 ```
-go get github.com/Emoe/kxss
+go install github.com/Emoe/kxss@latest
 ```
 
 ## Usage
