@@ -29,6 +29,8 @@ cp kxss /usr/local/bin/kxss
 To run this script use the following command:
 ```
 echo "https://www.**********.***/event_register.php?event=177" | kxss
+# or
+echo "http://testasp.vulnweb.com/Search.asp?tfSearch=ok" | kxss
 ```
 
 ## Question
