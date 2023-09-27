@@ -15,12 +15,22 @@ URL: https://www.**********.***/event_register.php?event=177 Param: event Unfilt
 To install this Tool please use the following Command:
 ```
 go get github.com/Emoe/kxss
+# or
+go install -v github.com/Emoe/kxss@latest
+# or
+git clone https://github.com/Emoe/kxss.git
+cd kxss/
+go build main.go
+mv main kxss
+cp kxss /usr/local/bin/kxss
 ```
 
 ## Usage
 To run this script use the following command:
 ```
 echo "https://www.**********.***/event_register.php?event=177" | kxss
+# or
+echo "http://testasp.vulnweb.com/Search.asp?tfSearch=ok" | kxss
 ```
 
 ## Question
