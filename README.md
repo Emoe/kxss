@@ -17,6 +17,12 @@ To install this Tool please use the following Command:
 go get github.com/Emoe/kxss
 # or
 go install -v github.com/Emoe/kxss@latest
+# or
+git clone https://github.com/Emoe/kxss.git
+cd kxss/
+go build main.go
+mv main kxss
+cp kxss /usr/local/bin/kxss
 ```
 
 ## Usage
