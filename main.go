@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -33,19 +33,26 @@ var httpClient = &http.Client{
 }
 
 func main() {
+	if err := run(os.Stdin, os.Stdout, os.Stderr); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
+}
 
+func run(in io.Reader, out io.Writer, errOut io.Writer) error {
 	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
 
-	sc := bufio.NewScanner(os.Stdin)
+	sc := bufio.NewScanner(in)
+	sc.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
 	initialChecks := make(chan paramCheck, 40)
 
 	appendChecks := makePool(initialChecks, func(c paramCheck, output chan paramCheck) {
 		reflected, err := checkReflected(c.url)
 		if err != nil {
-			//fmt.Fprintf(os.Stderr, "error from checkReflected: %s\n", err)
+			fmt.Fprintf(errOut, "error from checkReflected for url %s: %s\n", c.url, err)
 			return
 		}
 
@@ -63,7 +70,7 @@ func main() {
 	charChecks := makePool(appendChecks, func(c paramCheck, output chan paramCheck) {
 		wasReflected, err := checkAppend(c.url, c.param, "iy3j4h234hjb23234")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s: %s", c.url, c.param, err)
+			fmt.Fprintf(errOut, "error from checkAppend for url %s with param %s: %s\n", c.url, c.param, err)
 			return
 		}
 
@@ -73,29 +80,46 @@ func main() {
 	})
 
 	done := makePool(charChecks, func(c paramCheck, output chan paramCheck) {
-		output_of_url := []string{c.url, c.param}
-		for _, char := range []string{"\"", "'", "<", ">", "$", "|", "(", ")", "`", ":", ";", "{", "}"} {
-			wasReflected, err := checkAppend(c.url, c.param, "aprefix"+char+"asuffix")
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error from checkAppend for url %s with param %s with %s: %s", c.url, c.param, char, err)
-				continue
-			}
-
-			if wasReflected {
-				output_of_url = append(output_of_url, char)
-			}
-		}
-		if len(output_of_url) >= 2 {
-			fmt.Printf("URL: %s Param: %s Unfiltered: %v \n", output_of_url[0] , output_of_url[1],output_of_url[2:])
+		unfiltered := checkUnfilteredChars(c.url, c.param, errOut)
+		if len(unfiltered) > 0 {
+			fmt.Fprintf(out, "URL: %s Param: %s Unfiltered: %v\n", c.url, c.param, unfiltered)
 		}
 	})
 
 	for sc.Scan() {
-		initialChecks <- paramCheck{url: sc.Text()}
+		targetURL := strings.TrimSpace(sc.Text())
+		if targetURL == "" {
+			continue
+		}
+
+		initialChecks <- paramCheck{url: targetURL}
 	}
 
 	close(initialChecks)
 	<-done
+
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("error reading stdin: %w", err)
+	}
+
+	return nil
+}
+
+func checkUnfilteredChars(targetURL, param string, errOut io.Writer) []string {
+	unfiltered := make([]string, 0)
+	for _, char := range []string{"\"", "'", "<", ">", "$", "|", "(", ")", "`", ":", ";", "{", "}"} {
+		wasReflected, err := checkAppend(targetURL, param, "aprefix"+char+"asuffix")
+		if err != nil {
+			fmt.Fprintf(errOut, "error from checkAppend for url %s with param %s with %s: %s\n", targetURL, param, char, err)
+			continue
+		}
+
+		if wasReflected {
+			unfiltered = append(unfiltered, char)
+		}
+	}
+
+	return unfiltered
 }
 
 func checkReflected(targetURL string) ([]string, error) {
@@ -120,7 +144,7 @@ func checkReflected(targetURL string) ([]string, error) {
 	defer resp.Body.Close()
 
 	// always read the full body so we can re-use the tcp connection
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return out, err
 	}
@@ -131,7 +155,7 @@ func checkReflected(targetURL string) ([]string, error) {
 	}
 
 	// also nope
-	ct := resp.Header.Get("Content-Type")
+	ct := strings.ToLower(resp.Header.Get("Content-Type"))
 	if ct != "" && !strings.Contains(ct, "html") {
 		return out, nil
 	}
